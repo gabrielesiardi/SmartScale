@@ -3,10 +3,7 @@ import cors from "cors";
 import fetch from "node-fetch";
 
 const app = express();
-const port = process.env.PORT || 5174; // 5174 fallback for local dev
-app.listen(port, () => {
-  console.log(`Scale proxy running on http://localhost:${port}`);
-});
+const port = process.env.PORT || 8080;
 
 app.use(cors());
 
@@ -24,6 +21,7 @@ app.get("/scales/:ip/:scale", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ Scale proxy running on http://localhost:${PORT}`);
+// ✅ SINGLE listen call
+app.listen(port, () => {
+  console.log(`✅ Scale proxy running on http://localhost:${port}`);
 });
