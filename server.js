@@ -3,7 +3,10 @@ import cors from "cors";
 import fetch from "node-fetch";
 
 const app = express();
-const PORT = 5174; // Different port to avoid conflict with Vite
+const port = process.env.PORT || 5174; // 5174 fallback for local dev
+app.listen(port, () => {
+  console.log(`Scale proxy running on http://localhost:${port}`);
+});
 
 app.use(cors());
 
