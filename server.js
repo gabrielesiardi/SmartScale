@@ -7,7 +7,6 @@ const port = process.env.PORT || 8080;
 
 app.use(cors());
 
-// Original proxy endpoint for frontend
 app.get("/scales/:ip/:scale", async (req, res) => {
   const { ip, scale } = req.params;
   const targetUrl = `http://${ip}:8000/scales/${scale}/weight`;
@@ -21,7 +20,6 @@ app.get("/scales/:ip/:scale", async (req, res) => {
   }
 });
 
-// ✅ SINGLE listen call
 app.listen(port, () => {
   console.log(`✅ Scale proxy running on http://localhost:${port}`);
 });
