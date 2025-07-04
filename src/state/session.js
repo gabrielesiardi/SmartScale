@@ -1,6 +1,11 @@
 // src/state/session.js
 const isProduction = import.meta.env.PROD;
 
+// In production, use the API Container App URL directly
+const API_BASE_URL = isProduction 
+  ? "https://scale-api.internal.yellowground-93caf07b.northeurope.azurecontainerapps.io"  // Replace with your API URL
+  : "http://localhost:3001";
+
 export const defaultScales = [
   { 
     name: "Raspberry Pi 1 - Scale Left", 

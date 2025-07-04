@@ -4,10 +4,11 @@ import {
   loginToDataverse, 
   isAuthenticated
 } from "../utils/dataverseAuth";
+import { useAuth } from "../context/AuthContext"; // Add this import
 
 const WeightDisplay = ({ name, endpoint, refreshRate = 2 }) => {
   const [weight, setWeight] = useState(null);
-  const [status, setStatus] = useState('connecting'); // 'online', 'offline', 'connecting'
+  const [status, setStatus] = useState('connecting');
   const [lastUpdate, setLastUpdate] = useState(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState(null);
@@ -15,12 +16,13 @@ const WeightDisplay = ({ name, endpoint, refreshRate = 2 }) => {
   const [textInput, setTextInput] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
   const [lastRegistration, setLastRegistration] = useState(null);
-  const [isUserAuthenticated, setIsUserAuthenticated] = useState(false);
   const [inputError, setInputError] = useState('');
+
+  // Use global auth state instead of local state
+  const { isUserAuthenticated, updateAuthState } = useAuth();
 
   // Validate SSCC input (20 digits only)
   const validateSSCC = useCallback((value) => {
-    // Remove any non-digit characters for validation
     const digitsOnly = value.replace(/\D/g, '');
     
     if (value === '') {
@@ -44,14 +46,8 @@ const WeightDisplay = ({ name, endpoint, refreshRate = 2 }) => {
   // Handle SSCC input change
   const handleSSCCChange = useCallback((e) => {
     const value = e.target.value;
-    
-    // Only allow digits, limit to 20 characters
     const digitsOnly = value.replace(/\D/g, '').slice(0, 20);
-    
-    // Update input value
     setTextInput(digitsOnly);
-    
-    // Update validation error
     const validation = validateSSCC(digitsOnly);
     setInputError(validation.error);
   }, [validateSSCC]);
@@ -59,7 +55,6 @@ const WeightDisplay = ({ name, endpoint, refreshRate = 2 }) => {
   // Check if registration button should be enabled
   const isRegistrationEnabled = useCallback(() => {
     if (!weight || isRegistering) return false;
-    
     const validation = validateSSCC(textInput);
     return validation.isValid && textInput.length === 20;
   }, [weight, isRegistering, textInput, validateSSCC]);
@@ -70,9 +65,8 @@ const WeightDisplay = ({ name, endpoint, refreshRate = 2 }) => {
       setIsDarkMode(document.documentElement.classList.contains('dark'));
     };
     
-    checkDarkMode(); // Initial check
+    checkDarkMode();
     
-    // Listen for dark mode changes
     const observer = new MutationObserver(checkDarkMode);
     observer.observe(document.documentElement, {
       attributes: true,
@@ -82,11 +76,6 @@ const WeightDisplay = ({ name, endpoint, refreshRate = 2 }) => {
     return () => observer.disconnect();
   }, []);
 
-  // Check authentication status
-  useEffect(() => {
-    setIsUserAuthenticated(isAuthenticated());
-  }, []);
-
   const fetchWeight = useCallback(async () => {
     try {
       setIsUpdating(true);
@@ -94,7 +83,7 @@ const WeightDisplay = ({ name, endpoint, refreshRate = 2 }) => {
       
       console.log("Fetching from", endpoint);
       const res = await fetch(endpoint, {
-        timeout: 5000, // 5 second timeout
+        timeout: 5000,
       });
       
       if (!res.ok) {
@@ -104,11 +93,10 @@ const WeightDisplay = ({ name, endpoint, refreshRate = 2 }) => {
       const data = await res.json();
       console.log("Received weight:", data);
       
-      // Handle different response formats
       const weightValue = data.weight ?? data.data?.weight ?? data;
       
       if (weightValue !== null && weightValue !== undefined) {
-        setWeight(Number(weightValue).toFixed(1)); // Format to 1 decimal place
+        setWeight(Number(weightValue).toFixed(1));
         setStatus('online');
         setLastUpdate(new Date());
       } else {
@@ -126,9 +114,9 @@ const WeightDisplay = ({ name, endpoint, refreshRate = 2 }) => {
   }, [endpoint]);
 
   useEffect(() => {
-    fetchWeight(); // fetch immediately
+    fetchWeight();
     
-    const intervalMs = refreshRate * 1000; // convert seconds to milliseconds
+    const intervalMs = refreshRate * 1000;
     console.log(`Setting up interval for ${name} with ${refreshRate}s (${intervalMs}ms) refresh rate`);
     
     const interval = setInterval(() => {
@@ -197,13 +185,13 @@ const WeightDisplay = ({ name, endpoint, refreshRate = 2 }) => {
     setIsRegistering(true);
     
     try {
-      // Check if user is authenticated
       if (!isAuthenticated()) {
         console.log('User not authenticated, starting login process...');
         
         try {
           await loginToDataverse();
-          setIsUserAuthenticated(true);
+          // Update global auth state after successful login
+          updateAuthState();
           console.log('Login successful');
         } catch (loginError) {
           console.error('Login failed:', loginError);
@@ -226,16 +214,14 @@ const WeightDisplay = ({ name, endpoint, refreshRate = 2 }) => {
         ssccNumber: textInput.trim()
       });
       
-      // Submit to Dataverse
       const result = await submitWeightRegistration(
-        name,           // Scale name (for logging)
-        weight,         // Weight value → cr417_Weight
-        textInput.trim() // SSCC Number → cr417_SSCC_No
+        name,
+        weight,
+        textInput.trim()
       );
       
       console.log('Registration successful:', result);
       
-      // Update last registration info
       setLastRegistration({
         id: result.id,
         weight: weight,
@@ -243,11 +229,9 @@ const WeightDisplay = ({ name, endpoint, refreshRate = 2 }) => {
         timestamp: new Date()
       });
       
-      // Clear the text input after successful registration
       setTextInput('');
       setInputError('');
       
-      // Show success message
       alert(`✅ Weight registered successfully to Dataverse!
       
 Scale: ${name}
@@ -258,15 +242,11 @@ Record ID: ${result.id || 'Generated'}`);
     } catch (error) {
       console.error('Error registering weight:', error);
       
-      // Handle specific error cases
-      if (error.message.includes('No valid authentication token')) {
-        setIsUserAuthenticated(false);
-        alert('❌ Authentication required. Please try again to login.');
-      } else if (error.message.includes('Authentication expired')) {
-        setIsUserAuthenticated(false);
-        alert('❌ Authentication expired. Please try again to re-login.');
-      } else if (error.message.includes('HTTP 401')) {
-        setIsUserAuthenticated(false);
+      if (error.message.includes('No valid authentication token') || 
+          error.message.includes('Authentication expired') ||
+          error.message.includes('HTTP 401')) {
+        // Update global auth state on auth failure
+        updateAuthState();
         alert('❌ Authentication expired. Please try again to re-login.');
       } else if (error.message.includes('HTTP 403')) {
         alert('❌ Permission denied. Please check your Dataverse permissions.');
@@ -324,7 +304,6 @@ Record ID: ${result.id || 'Generated'}`);
                 kg
               </span>
               
-              {/* Subtle glow effect for active scales */}
               {status === 'online' && (
                 <div className="absolute inset-0 bg-green-100 dark:bg-green-900/20 rounded-lg opacity-30 blur-xl -z-10"></div>
               )}
@@ -427,7 +406,7 @@ Record ID: ${result.id || 'Generated'}`);
             </div>
           </div>
 
-          {/* Login Status */}
+          {/* Login Status - Updated to use global auth state */}
           {!isUserAuthenticated && (
             <div className="text-xs bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded border-l-2 border-yellow-500">
               <p className="font-medium text-yellow-700 dark:text-yellow-400">
@@ -435,6 +414,18 @@ Record ID: ${result.id || 'Generated'}`);
               </p>
               <p className="text-yellow-600 dark:text-yellow-500">
                 You'll be prompted to login when registering weight
+              </p>
+            </div>
+          )}
+
+          {/* Show logged in status */}
+          {isUserAuthenticated && (
+            <div className="text-xs bg-green-50 dark:bg-green-900/20 p-2 rounded border-l-2 border-green-500">
+              <p className="font-medium text-green-700 dark:text-green-400">
+                ✅ Logged in to Dataverse
+              </p>
+              <p className="text-green-600 dark:text-green-500">
+                Ready to register weights
               </p>
             </div>
           )}
