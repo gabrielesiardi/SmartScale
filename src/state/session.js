@@ -1,6 +1,31 @@
 // src/state/session.js
+const isProduction = import.meta.env.PROD;
+
 export const defaultScales = [
-  { name: "Scale A", endpoint: "http://scale-api-20250702165210.northeurope.azurecontainer.io:3001/api/v1/weight/217.57.87.90/scale_left?port=60080" }
+  { 
+    name: "Raspberry Pi 1 - Scale Left", 
+    endpoint: isProduction 
+      ? "/api/v1/weight/217.57.87.90/scale_left?port=60080"  // NAT -> raspberry1:8000
+      : "http://localhost:3001/api/v1/weight/217.57.87.90/scale_left?port=60080"
+  },
+  { 
+    name: "Raspberry Pi 1 - Scale Right", 
+    endpoint: isProduction 
+      ? "/api/v1/weight/217.57.87.90/scale_right?port=60080"  // NAT -> raspberry1:8000
+      : "http://localhost:3001/api/v1/weight/217.57.87.90/scale_right?port=60080"
+  },
+  { 
+    name: "Raspberry Pi 2 - Scale A", 
+    endpoint: isProduction 
+      ? "/api/v1/weight/217.57.87.90/scale_a?port=60081"  // NAT -> raspberry2:8000
+      : "http://localhost:3001/api/v1/weight/217.57.87.90/scale_a?port=60081"
+  },
+  { 
+    name: "Raspberry Pi 2 - Scale B", 
+    endpoint: isProduction 
+      ? "/api/v1/weight/217.57.87.90/scale_b?port=60081"  // NAT -> raspberry2:8000
+      : "http://localhost:3001/api/v1/weight/217.57.87.90/scale_b?port=60081"
+  }
 ];
 
 export function checkCredentials(username, password) {
