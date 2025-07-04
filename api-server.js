@@ -9,6 +9,10 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+// In-memory storage for registrations (use database in production)
+const registrations = [];
+const MAX_REGISTRATIONS = 1000;
+
 // Health check endpoint
 app.get("/health", (req, res) => {
   res.json({ 
@@ -30,7 +34,7 @@ app.get("/api/v1/weight/:endpoint/:scaleName", async (req, res) => {
   try {
     const startTime = Date.now();
     const response = await fetch(targetUrl, { 
-      timeout: 5000 // 5 second timeout
+      timeout: 15000 // Increased timeout for Azure to home network
     });
     
     if (!response.ok) {
@@ -84,7 +88,7 @@ app.post("/api/v1/weight/batch", async (req, res) => {
       
       try {
         const startTime = Date.now();
-        const response = await fetch(targetUrl, { timeout: 5000 });
+        const response = await fetch(targetUrl, { timeout: 15000 });
         
         if (!response.ok) {
           throw new Error(`Scale responded with status: ${response.status}`);
@@ -137,7 +141,7 @@ app.get("/api/v1/discover/:endpoint", async (req, res) => {
   const targetUrl = `http://${cleanEndpoint}:${port}/scales`;
 
   try {
-    const response = await fetch(targetUrl, { timeout: 5000 });
+    const response = await fetch(targetUrl, { timeout: 15000 });
     
     if (!response.ok) {
       throw new Error(`Endpoint responded with status: ${response.status}`);
@@ -164,11 +168,168 @@ app.get("/api/v1/discover/:endpoint", async (req, res) => {
   }
 });
 
-// API documentation endpoint
+// 🆕 NEW BARCODE ENDPOINTS START HERE 🆕
+
+// Endpoint for Raspberry Pi to register weights automatically
+app.post("/api/v1/register-weight", async (req, res) => {
+  const { scale_name, weight, sscc_number, timestamp, source, raspberry_ip } = req.body;
+  
+  console.log(`📋 Registration request from ${source || 'unknown'}:`, {
+    scale_name,
+    weight,
+    sscc_number,
+    raspberry_ip,
+    timestamp: new Date(timestamp * 1000).toISOString()
+  });
+  
+  // Validate required fields
+  if (!scale_name || !weight || !sscc_number) {
+    return res.status(400).json({
+      success: false,
+      error: "Missing required fields: scale_name, weight, sscc_number",
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  // Validate SSCC number (20 digits)
+  const ssccRegex = /^\d{20}$/;
+  if (!ssccRegex.test(sscc_number)) {
+    return res.status(400).json({
+      success: false,
+      error: "SSCC number must be exactly 20 digits",
+      received: sscc_number,
+      length: sscc_number.length,
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  // Validate weight
+  const weightNum = parseFloat(weight);
+  if (isNaN(weightNum) || weightNum <= 0) {
+    return res.status(400).json({
+      success: false,
+      error: "Weight must be a positive number",
+      received: weight,
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  try {
+    // Generate unique registration ID
+    const registration_id = `REG_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Create registration record
+    const registration = {
+      id: registration_id,
+      scale_name,
+      weight: weightNum,
+      sscc_number,
+      source: source || 'unknown',
+      raspberry_ip: raspberry_ip || req.ip,
+      scan_timestamp: timestamp ? new Date(timestamp * 1000) : new Date(),
+      processed_timestamp: new Date(),
+      status: 'processed'
+    };
+    
+    // Store registration (in production, save to database)
+    registrations.unshift(registration);
+    
+    // Keep only last MAX_REGISTRATIONS entries
+    if (registrations.length > MAX_REGISTRATIONS) {
+      registrations.splice(MAX_REGISTRATIONS);
+    }
+    
+    console.log(`✅ Registration processed: ${registration_id}`);
+    
+    res.json({
+      success: true,
+      registration_id,
+      scale_name,
+      weight: weightNum,
+      sscc_number,
+      processed_at: registration.processed_timestamp.toISOString(),
+      message: "Weight registration processed successfully"
+    });
+    
+  } catch (error) {
+    console.error('❌ Error processing registration:', error);
+    res.status(500).json({
+      success: false,
+      error: "Internal server error processing registration",
+      details: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Endpoint to get recent registrations (for monitoring)
+app.get("/api/v1/registrations", (req, res) => {
+  const { limit = 50, scale_name, status } = req.query;
+  
+  let filteredRegistrations = [...registrations];
+  
+  // Filter by scale name if specified
+  if (scale_name) {
+    filteredRegistrations = filteredRegistrations.filter(
+      reg => reg.scale_name === scale_name
+    );
+  }
+  
+  // Filter by status if specified
+  if (status) {
+    filteredRegistrations = filteredRegistrations.filter(
+      reg => reg.status === status
+    );
+  }
+  
+  // Limit results
+  const limitNum = parseInt(limit);
+  if (limitNum > 0) {
+    filteredRegistrations = filteredRegistrations.slice(0, limitNum);
+  }
+  
+  res.json({
+    success: true,
+    registrations: filteredRegistrations,
+    total_count: registrations.length,
+    filtered_count: filteredRegistrations.length,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Endpoint to get registration statistics
+app.get("/api/v1/registrations/stats", (req, res) => {
+  const now = new Date();
+  const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const lastHour = new Date(now.getTime() - 60 * 60 * 1000);
+  
+  const stats = {
+    total: registrations.length,
+    last_24h: registrations.filter(reg => reg.processed_timestamp >= last24h).length,
+    last_hour: registrations.filter(reg => reg.processed_timestamp >= lastHour).length,
+    by_scale: {},
+    by_status: {},
+    latest_registration: registrations.length > 0 ? registrations[0].processed_timestamp : null
+  };
+  
+  // Group by scale
+  registrations.forEach(reg => {
+    stats.by_scale[reg.scale_name] = (stats.by_scale[reg.scale_name] || 0) + 1;
+    stats.by_status[reg.status] = (stats.by_status[reg.status] || 0) + 1;
+  });
+  
+  res.json({
+    success: true,
+    stats,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// API documentation endpoint (UPDATED with new endpoints)
 app.get("/api/v1/docs", (req, res) => {
   res.json({
     title: "Scale Monitor API",
-    version: "1.0.0",
+    version: "1.1.0",
     base_url: `http://localhost:${PORT}`,
     endpoints: {
       "GET /health": "Health check",
@@ -197,7 +358,37 @@ app.get("/api/v1/docs", (req, res) => {
           endpoint: "IP address or FQDN of the scale server",
           port: "Port number (optional, default: 8000)"
         }
-      }
+      },
+      "POST /api/v1/register-weight": {
+        description: "Register a weight measurement (used by barcode readers)",
+        body: {
+          scale_name: "scale_left",
+          weight: 125.5,
+          sscc_number: "12345678901234567890",
+          timestamp: 1625097600,
+          source: "barcode_reader",
+          raspberry_ip: "217.57.87.90"
+        }
+      },
+      "GET /api/v1/registrations": {
+        description: "Get recent weight registrations",
+        parameters: {
+          limit: "Number of results (default: 50)",
+          scale_name: "Filter by scale name",
+          status: "Filter by status (pending/processed/failed)"
+        }
+      },
+      "GET /api/v1/registrations/stats": "Get registration statistics"
+    },
+    barcode_integration: {
+      description: "Barcode readers automatically call POST /api/v1/register-weight",
+      flow: [
+        "1. User scans barcode with reader connected to Raspberry Pi",
+        "2. Python script validates SSCC and gets current weight",
+        "3. Script calls POST /api/v1/register-weight",
+        "4. API validates and stores registration",
+        "5. Optional: Forward to Dataverse or other systems"
+      ]
     }
   });
 });
@@ -222,7 +413,10 @@ app.use((req, res) => {
       'GET /api/v1/docs',
       'GET /api/v1/weight/:endpoint/:scaleName',
       'POST /api/v1/weight/batch',
-      'GET /api/v1/discover/:endpoint'
+      'GET /api/v1/discover/:endpoint',
+      'POST /api/v1/register-weight',
+      'GET /api/v1/registrations',
+      'GET /api/v1/registrations/stats'
     ],
     timestamp: new Date().toISOString()
   });
@@ -232,4 +426,5 @@ app.listen(PORT, () => {
   console.log(`✅ Scale Monitor API running on http://localhost:${PORT}`);
   console.log(`📖 API Documentation: http://localhost:${PORT}/api/v1/docs`);
   console.log(`❤️  Health Check: http://localhost:${PORT}/health`);
+  console.log(`📋 Registrations: http://localhost:${PORT}/api/v1/registrations`);
 });
