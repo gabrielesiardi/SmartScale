@@ -113,34 +113,51 @@ function App() {
           : 'bg-gradient-to-br from-gray-50 via-white to-gray-100'
       } ${isFullscreen ? 'p-2' : 'p-4'}`}>
         
-        {/* Header - Keep exactly the same */}
+        // In App.jsx, find the header section and replace it with this:
+
+        {/* Header */}
         <header className={`${
           isDarkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'
         } rounded-lg shadow-lg mb-6 transition-all duration-300`}>
           <div className="px-6 py-4">
             <div className="flex justify-between items-center">
               <div className="flex items-center space-x-4">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                  isDarkMode ? 'bg-primary-600' : 'bg-gradient-to-br from-primary-500 to-primary-600'
-                }`}>
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-                  </svg>
+                {/* Replace the scale icon with your logo */}
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden">
+                  <img 
+                    src="/logo.png" 
+                    alt="Scale APP Logo" 
+                    className="w-full h-full object-contain"
+                    onError={(e) => {
+                      // Fallback to the original scale icon if logo.png doesn't load
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'flex';
+                    }}
+                  />
+                  {/* Fallback scale icon (hidden by default) */}
+                  <div className={`w-10 h-10 rounded-lg items-center justify-center hidden ${
+                    isDarkMode ? 'bg-primary-600' : 'bg-gradient-to-br from-primary-500 to-primary-600'
+                  }`}>
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                    </svg>
+                  </div>
                 </div>
                 <div>
                   <h1 className={`text-2xl font-bold ${
                     isDarkMode ? 'text-white' : 'text-gray-900'
                   }`}>
-                    SmartScale Monitor
+                    Scale APP
                   </h1>
                   <p className={`text-sm ${
                     isDarkMode ? 'text-gray-300' : 'text-gray-600'
                   }`}>
-                    v1.0 • {selectedScales.length} scale{selectedScales.length !== 1 ? 's' : ''} connected • {refreshRate}s refresh
+                    Smart Weight Monitor • {selectedScales.length} scale{selectedScales.length !== 1 ? 's' : ''} connected • {refreshRate}s refresh
                   </p>
                 </div>
               </div>
 
+              {/* Rest of the header remains the same */}
               <div className="flex items-center space-x-3">
                 <button
                   onClick={refreshAllScales}
@@ -264,7 +281,7 @@ function App() {
               isDarkMode ? 'text-gray-400' : 'text-gray-500'
             }`}>
               <div className="flex items-center justify-center space-x-4">
-                <span>SmartScale Monitor v1.0</span>
+                <span>Scale APP • Smart Weight Monitor</span>  {/* Changed from "SmartScale Monitor v1.0" */}
                 <span>•</span>
                 <span>Auto-refresh every {refreshRate} second{refreshRate !== 1 ? 's' : ''}</span>
                 <span>•</span>
