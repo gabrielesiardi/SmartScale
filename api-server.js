@@ -13,6 +13,31 @@ app.use(express.json());
 const registrations = [];
 const MAX_REGISTRATIONS = 1000;
 
+// Helper function to extract weight from different response formats
+const extractWeight = (data) => {
+  // If data.weight is a number, return it directly
+  if (typeof data.weight === 'number') {
+    return data.weight;
+  }
+  
+  // If data.weight is an object with nested weight, extract it
+  if (data.weight && typeof data.weight === 'object' && 'weight' in data.weight) {
+    return data.weight.weight;
+  }
+  
+  // Fallback to the original data if it's a number
+  if (typeof data === 'number') {
+    return data;
+  }
+  
+  // Check if there's a weight property in the root
+  if (data && typeof data === 'object' && 'weight' in data && typeof data.weight === 'number') {
+    return data.weight;
+  }
+  
+  return null;
+};
+
 // Health check endpoint
 app.get("/health", (req, res) => {
   res.json({ 
@@ -44,17 +69,24 @@ app.get("/api/v1/weight/:endpoint/:scaleName", async (req, res) => {
     const data = await response.json();
     const responseTime = Date.now() - startTime;
     
-    res.json({
-      success: true,
-      data: {
-        weight: data.weight || data,
-        unit: data.unit || "kg",
-        scale_name: scaleName,
-        endpoint: cleanEndpoint,
-        timestamp: new Date().toISOString(),
-        response_time_ms: responseTime
-      }
-    });
+    // Extract weight using the helper function
+    const weightValue = extractWeight(data);
+    
+    if (weightValue !== null && weightValue !== undefined) {
+      res.json({
+        success: true,
+        data: {
+          weight: weightValue,
+          unit: data.unit || "kg",
+          scale_name: scaleName,
+          endpoint: cleanEndpoint,
+          timestamp: new Date().toISOString(),
+          response_time_ms: responseTime
+        }
+      });
+    } else {
+      throw new Error('Could not extract weight value from response');
+    }
   } catch (err) {
     console.error(`Error fetching from ${targetUrl}:`, err.message);
     res.status(500).json({ 
@@ -97,11 +129,14 @@ app.post("/api/v1/weight/batch", async (req, res) => {
         const data = await response.json();
         const responseTime = Date.now() - startTime;
         
+        // Extract weight using the helper function
+        const weightValue = extractWeight(data);
+        
         return {
           success: true,
           scale_name: scaleName,
           endpoint: cleanEndpoint,
-          weight: data.weight || data,
+          weight: weightValue !== null ? weightValue : 0,
           unit: data.unit || "kg",
           response_time_ms: responseTime,
           timestamp: new Date().toISOString()
@@ -329,7 +364,7 @@ app.get("/api/v1/registrations/stats", (req, res) => {
 app.get("/api/v1/docs", (req, res) => {
   res.json({
     title: "Scale Monitor API",
-    version: "1.1.0",
+    version: "1.2.0",
     base_url: `http://localhost:${PORT}`,
     endpoints: {
       "GET /health": "Health check",
@@ -388,6 +423,14 @@ app.get("/api/v1/docs", (req, res) => {
         "3. Script calls POST /api/v1/register-weight",
         "4. API validates and stores registration",
         "5. Optional: Forward to Dataverse or other systems"
+      ]
+    },
+    weight_extraction: {
+      description: "API handles multiple weight response formats",
+      supported_formats: [
+        "Direct number: {weight: 123.45}",
+        "Nested object: {weight: {weight: 123.45, status: 'ok', ...}}",
+        "Raw number: 123.45"
       ]
     }
   });
