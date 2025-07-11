@@ -112,8 +112,6 @@ function App() {
           ? 'dark bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' 
           : 'bg-gradient-to-br from-gray-50 via-white to-gray-100'
       } ${isFullscreen ? 'p-2' : 'p-4'}`}>
-        
-        // In App.jsx, find the header section and replace it with this:
 
         {/* Header */}
         <header className={`${
